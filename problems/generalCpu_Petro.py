@@ -31,10 +31,9 @@ class SolutionModel(nn.Module):
         self.linear4bn = nn.BatchNorm1d(self.hidden_size,track_running_stats=False)
         self.linear5 = nn.Linear(self.hidden_size, self.hidden_size)
         self.linear5bn = nn.BatchNorm1d(self.hidden_size,track_running_stats=False)
-        self.linear6 = nn.Linear(self.hidden_size, self.hidden_size)
-        self.linear6bn = nn.BatchNorm1d(self.hidden_size,track_running_stats=False)
-        self.linear7 = nn.Linear(self.hidden_size, output_size)
-        self.linear7bn = nn.BatchNorm1d(output_size,track_running_stats=False)
+        self.linear6 = nn.Linear(self.hidden_size, output_size)
+        self.linear6bn = nn.BatchNorm1d(output_size,track_running_stats=False)
+
 
     def forward(self, x):
         x = self.linear1(x)
@@ -48,19 +47,17 @@ class SolutionModel(nn.Module):
         x = self.linear5(x)
         x = nn.ReLU6()(self.linear5bn(x))
         x = self.linear6(x)
-        x = nn.ReLU6()(self.linear6bn(x))
-        x = self.linear7(x)
-        x = F.sigmoid(self.linear7bn(x))
+        x = F.sigmoid(self.linear6bn(x))
         return x
-    
+
 class Solution():
     def __init__(self):
-        #best to date: lr = 0.081, hs = 42, ReLU6 + sigmoid, seven layers total, momentum = 0.9, nesterov
-    
-        self.lr = 0.081
-        self.lr_grid = [0.01,0.1,1,10]
-        self.hidden_size = 42
-        self.hidden_size_grid = [5,10,30,50,70]
+        self.lr = 0.08
+        #self.lr_grid = [0.6,0.65,0.7,0.75,1.0,2.0, 5, 10]
+        self.lr_grid = [0.05, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.14]
+        self.hidden_size = 39
+        #self.hidden_size_grid = [40,50,55,58,60,61,62,63,64,65]
+        self.hidden_size_grid = [28, 32, 34, 35, 36, 37, 38, 39, 45, 50]
         self.grid_search = GridSearch(self).set_enabled(False)
 
     def create_model(self, input_size, output_size):
@@ -71,12 +68,12 @@ class Solution():
         step = 0
         # Put model in train mode
         model.train()
+        optimizer = optim.SGD(model.parameters(), lr=self.lr, momentum = 0.9, nesterov = True)
         while True:
             time_left = context.get_timer().get_time_left()
             # No more time left, stop training
-            #if time_left < 0.1:
-            #    break
-            optimizer = optim.SGD(model.parameters(), lr=self.lr, momentum = 0.9, nesterov = True)
+            if time_left < 0.1:
+                break
             data = train_data
             target = train_target
             # model.parameters()...gradient set to zero
@@ -91,17 +88,25 @@ class Solution():
             # Total number of needed predictions
             total = target.view(-1).size(0)
             if correct == total:
+                print("PASSED - STEP {}".format(step))
+                if BestSol["steps"]>step:
+                    BestSol["steps"] = step
+                    BestSol["LR"] = self.lr
+                    BestSol["HS"] = self.hidden_size
+                break
+            if step > 30 :
+                print("FAILED")
                 break
             # calculate loss
-            #sm.SolutionManager.print_hint("Hint[3]: Explore other loss functions", step)
             loss = nn.BCELoss()(output,target)
             # calculate deriviative of model.forward() and put it in model.parameters()...gradient
             loss.backward()
             # print progress of the learning
-            self.print_stats(step, loss, correct, total)
+            # self.print_stats(step, loss, correct, total)
             # update model: model.parameters() -= lr * gradient
             optimizer.step()
             step += 1
+        print("LR = {} HS = {}".format(self.lr,self.hidden_size))
         return step
     
     def print_stats(self, step, loss, correct, total):
@@ -152,4 +157,9 @@ class Config:
         return Solution()
 
 # If you want to run specific case, put number here
+BestSol = {"steps"  :10000,
+           "LR"     :0,
+           "HS"     :0
+           }
 sm.SolutionManager(Config()).run(case_number=-1)
+#print("Best parameters: LR = {}, HS = {}, solves in {} steps".format(BestSol["LR"],BestSol["HS"],BestSol["steps"]))
